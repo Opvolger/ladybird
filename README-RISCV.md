@@ -4,8 +4,6 @@ This is a list of hacks/ugly fixes I made to make Ladybird build on OrangePi RV2
 
 They should be resolved before doing a proper merge request.
 
- - [ ] FFMPEG theora needs CMake 3.30 but system only had 3.28 => removed theora feature
- - [ ] FFMPEG vpx needs CMake 3.30 but system only had 3.28 => removed vpx feature
  - [ ] Envvar manually set for build: `export VCPKG_FORCE_SYSTEM_BINARIES=1`
  - [ ] Changed `Build/release/vcpkg_installed/riscv64-linux-dynamic/tools/gn` manually to system executable
  - [ ] Manually created missing `libpkgconf.so.7` as link to `libpkgconf.so.3` (not sure which directory exactly)

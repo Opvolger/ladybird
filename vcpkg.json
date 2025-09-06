@@ -44,7 +44,9 @@
         "openh264",
         "opus",
         "webp",
+        "theora",
         "vorbis",
+        "vpx",
         "zlib"
       ]
     },
@@ -259,6 +261,10 @@
     {
       "name": "libavif",
       "version": "1.3.0#0"
+    },
+    {
+      "name": "libvpx",
+      "version": "1.15.2#0"
     },
     {
       "name": "libwebp",
