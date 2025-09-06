@@ -146,7 +146,6 @@ public:
     static CSS::TextJustify text_justify() { return CSS::TextJustify::Auto; }
     static CSS::Positioning position() { return CSS::Positioning::Static; }
     static CSS::TextDecorationLine text_decoration_line() { return CSS::TextDecorationLine::None; }
-    static CSS::Length text_decoration_thickness() { return Length::make_auto(); }
     static CSS::TextDecorationStyle text_decoration_style() { return CSS::TextDecorationStyle::Solid; }
     static CSS::TextTransform text_transform() { return CSS::TextTransform::None; }
     static CSS::TextOverflow text_overflow() { return CSS::TextOverflow::Clip; }
@@ -195,7 +194,7 @@ public:
     static CSS::TextAnchor text_anchor() { return CSS::TextAnchor::Start; }
     static CSS::Length border_radius() { return Length::make_px(0); }
     static Variant<CSS::VerticalAlign, CSS::LengthPercentage> vertical_align() { return CSS::VerticalAlign::Baseline; }
-    static CSS::LengthBox inset() { return { CSS::Length::make_auto(), CSS::Length::make_auto(), CSS::Length::make_auto(), CSS::Length::make_auto() }; }
+    static CSS::LengthBox inset() { return {}; }
     static CSS::LengthBox margin() { return { CSS::Length::make_px(0), CSS::Length::make_px(0), CSS::Length::make_px(0), CSS::Length::make_px(0) }; }
     static CSS::LengthBox padding() { return { CSS::Length::make_px(0), CSS::Length::make_px(0), CSS::Length::make_px(0), CSS::Length::make_px(0) }; }
     static CSS::Size width() { return CSS::Size::make_auto(); }
@@ -242,8 +241,8 @@ public:
     static LengthPercentage cx() { return CSS::Length::make_px(0); }
     static LengthPercentage cy() { return CSS::Length::make_px(0); }
     static LengthPercentage r() { return CSS::Length::make_px(0); }
-    static LengthPercentage rx() { return CSS::Length::make_auto(); }
-    static LengthPercentage ry() { return CSS::Length::make_auto(); }
+    static LengthPercentageOrAuto rx() { return CSS::LengthPercentageOrAuto::make_auto(); }
+    static LengthPercentageOrAuto ry() { return CSS::LengthPercentageOrAuto::make_auto(); }
     static LengthPercentage x() { return CSS::Length::make_px(0); }
     static LengthPercentage y() { return CSS::Length::make_px(0); }
 
@@ -345,8 +344,8 @@ struct BackgroundLayerData {
     CSS::PositionEdge position_edge_y { CSS::PositionEdge::Top };
     CSS::LengthPercentage position_offset_y { CSS::Length::make_px(0) };
     CSS::BackgroundSize size_type { CSS::BackgroundSize::LengthPercentage };
-    CSS::LengthPercentage size_x { CSS::Length::make_auto() };
-    CSS::LengthPercentage size_y { CSS::Length::make_auto() };
+    CSS::LengthPercentageOrAuto size_x { CSS::LengthPercentageOrAuto::make_auto() };
+    CSS::LengthPercentageOrAuto size_y { CSS::LengthPercentageOrAuto::make_auto() };
     CSS::Repetition repeat_x { CSS::Repetition::Repeat };
     CSS::Repetition repeat_y { CSS::Repetition::Repeat };
     CSS::MixBlendMode blend_mode { CSS::MixBlendMode::Normal };
@@ -427,6 +426,12 @@ struct BorderRadiusData {
     CSS::LengthPercentage vertical_radius { InitialValues::border_radius() };
 };
 
+struct TextDecorationThickness {
+    struct Auto { };
+    struct FromFont { };
+    Variant<Auto, FromFont, LengthPercentage> value;
+};
+
 // FIXME: Find a better place for this helper.
 inline Gfx::ScalingMode to_gfx_scaling_mode(CSS::ImageRendering css_value, Gfx::IntRect source, Gfx::IntRect target)
 {
@@ -476,7 +481,7 @@ public:
     CSS::TextWrapMode text_wrap_mode() const { return m_inherited.text_wrap_mode; }
     CSS::TextRendering text_rendering() const { return m_inherited.text_rendering; }
     Vector<CSS::TextDecorationLine> const& text_decoration_line() const { return m_noninherited.text_decoration_line; }
-    CSS::LengthPercentage const& text_decoration_thickness() const { return m_noninherited.text_decoration_thickness; }
+    TextDecorationThickness const& text_decoration_thickness() const { return m_noninherited.text_decoration_thickness; }
     CSS::TextDecorationStyle text_decoration_style() const { return m_noninherited.text_decoration_style; }
     Color text_decoration_color() const { return m_noninherited.text_decoration_color; }
     CSS::TextTransform text_transform() const { return m_inherited.text_transform; }
@@ -598,8 +603,8 @@ public:
     LengthPercentage const& cx() const { return m_noninherited.cx; }
     LengthPercentage const& cy() const { return m_noninherited.cy; }
     LengthPercentage const& r() const { return m_noninherited.r; }
-    LengthPercentage const& rx() const { return m_noninherited.ry; }
-    LengthPercentage const& ry() const { return m_noninherited.ry; }
+    LengthPercentageOrAuto const& rx() const { return m_noninherited.ry; }
+    LengthPercentageOrAuto const& ry() const { return m_noninherited.ry; }
     LengthPercentage const& x() const { return m_noninherited.x; }
     LengthPercentage const& y() const { return m_noninherited.y; }
 
@@ -735,7 +740,7 @@ protected:
         Optional<int> z_index;
         // FIXME: Store this as flags in a u8.
         Vector<CSS::TextDecorationLine> text_decoration_line { InitialValues::text_decoration_line() };
-        CSS::LengthPercentage text_decoration_thickness { InitialValues::text_decoration_thickness() };
+        TextDecorationThickness text_decoration_thickness { TextDecorationThickness::Auto {} };
         CSS::TextDecorationStyle text_decoration_style { InitialValues::text_decoration_style() };
         Color text_decoration_color { InitialValues::color() };
         CSS::TextOverflow text_overflow { InitialValues::text_overflow() };
@@ -831,8 +836,8 @@ protected:
         LengthPercentage cx { InitialValues::cx() };
         LengthPercentage cy { InitialValues::cy() };
         LengthPercentage r { InitialValues::r() };
-        LengthPercentage rx { InitialValues::rx() };
-        LengthPercentage ry { InitialValues::ry() };
+        LengthPercentageOrAuto rx { InitialValues::rx() };
+        LengthPercentageOrAuto ry { InitialValues::ry() };
         LengthPercentage x { InitialValues::x() };
         LengthPercentage y { InitialValues::x() };
 
@@ -898,7 +903,7 @@ public:
     void set_text_align(CSS::TextAlign text_align) { m_inherited.text_align = text_align; }
     void set_text_justify(CSS::TextJustify text_justify) { m_inherited.text_justify = text_justify; }
     void set_text_decoration_line(Vector<CSS::TextDecorationLine> value) { m_noninherited.text_decoration_line = move(value); }
-    void set_text_decoration_thickness(CSS::LengthPercentage value) { m_noninherited.text_decoration_thickness = move(value); }
+    void set_text_decoration_thickness(TextDecorationThickness value) { m_noninherited.text_decoration_thickness = move(value); }
     void set_text_decoration_style(CSS::TextDecorationStyle value) { m_noninherited.text_decoration_style = value; }
     void set_text_decoration_color(Color value) { m_noninherited.text_decoration_color = value; }
     void set_text_transform(CSS::TextTransform value) { m_inherited.text_transform = value; }

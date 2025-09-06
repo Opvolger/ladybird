@@ -198,7 +198,9 @@ Size ComputedProperties::size_value(PropertyID id) const
     }
     if (value.is_fit_content()) {
         auto& fit_content = value.as_fit_content();
-        return Size::make_fit_content(fit_content.length_percentage());
+        if (auto length_percentage = fit_content.length_percentage(); length_percentage.has_value())
+            return Size::make_fit_content(length_percentage.release_value());
+        return Size::make_fit_content();
     }
 
     if (value.is_calculated())
@@ -207,12 +209,8 @@ Size ComputedProperties::size_value(PropertyID id) const
     if (value.is_percentage())
         return Size::make_percentage(value.as_percentage().percentage());
 
-    if (value.is_length()) {
-        auto length = value.as_length().length();
-        if (length.is_auto())
-            return Size::make_auto();
-        return Size::make_length(length);
-    }
+    if (value.is_length())
+        return Size::make_length(value.as_length().length());
 
     // FIXME: Support `anchor-size(..)`
     if (value.is_anchor_size())
@@ -220,11 +218,6 @@ Size ComputedProperties::size_value(PropertyID id) const
 
     dbgln("FIXME: Unsupported size value: `{}`, treating as `auto`", value.to_string(SerializationMode::Normal));
     return Size::make_auto();
-}
-
-LengthPercentage ComputedProperties::length_percentage_or_fallback(PropertyID id, Layout::NodeWithStyle const& layout_node, ClampNegativeLengths disallow_negative_lengths, LengthPercentage const& fallback) const
-{
-    return length_percentage(id, layout_node, disallow_negative_lengths).value_or(fallback);
 }
 
 Optional<LengthPercentage> ComputedProperties::length_percentage(PropertyID id, Layout::NodeWithStyle const& layout_node, ClampNegativeLengths disallow_negative_lengths) const
@@ -256,9 +249,6 @@ Optional<LengthPercentage> ComputedProperties::length_percentage(PropertyID id, 
         return length;
     }
 
-    if (value.has_auto())
-        return LengthPercentage { Length::make_auto() };
-
     return {};
 }
 
@@ -267,14 +257,48 @@ Length ComputedProperties::length(PropertyID property_id) const
     return property(property_id).as_length().length();
 }
 
-LengthBox ComputedProperties::length_box(PropertyID left_id, PropertyID top_id, PropertyID right_id, PropertyID bottom_id, Layout::NodeWithStyle const& layout_node, ClampNegativeLengths disallow_negative_lengths, Length const& default_value) const
+LengthBox ComputedProperties::length_box(PropertyID left_id, PropertyID top_id, PropertyID right_id, PropertyID bottom_id, Layout::NodeWithStyle const& layout_node, ClampNegativeLengths disallow_negative_lengths, LengthPercentageOrAuto const& default_value) const
 {
-    LengthBox box;
-    box.left() = length_percentage_or_fallback(left_id, layout_node, disallow_negative_lengths, default_value);
-    box.top() = length_percentage_or_fallback(top_id, layout_node, disallow_negative_lengths, default_value);
-    box.right() = length_percentage_or_fallback(right_id, layout_node, disallow_negative_lengths, default_value);
-    box.bottom() = length_percentage_or_fallback(bottom_id, layout_node, disallow_negative_lengths, default_value);
-    return box;
+    auto length_box_side = [&](PropertyID id) -> LengthPercentageOrAuto {
+        auto const& value = property(id);
+
+        if (value.is_calculated())
+            return LengthPercentage { value.as_calculated() };
+
+        if (value.is_percentage()) {
+            auto percentage = value.as_percentage().percentage();
+
+            // FIXME: This value can be negative as interpolation does not yet clamp values to allowed ranges - remove this
+            //        once we do that.
+            if (disallow_negative_lengths == ClampNegativeLengths::Yes && percentage.as_fraction() < 0)
+                return default_value;
+
+            return percentage;
+        }
+
+        if (value.is_length()) {
+            auto length = value.as_length().length();
+
+            // FIXME: This value can be negative as interpolation does not yet clamp values to allowed ranges - remove this
+            //        once we do that.
+            if (disallow_negative_lengths == ClampNegativeLengths::Yes && length.to_px(layout_node) < 0)
+                return default_value;
+
+            return value.as_length().length();
+        }
+
+        if (value.has_auto())
+            return LengthPercentageOrAuto::make_auto();
+
+        return default_value;
+    };
+
+    return LengthBox {
+        length_box_side(top_id),
+        length_box_side(right_id),
+        length_box_side(bottom_id),
+        length_box_side(left_id)
+    };
 }
 
 Color ComputedProperties::color_or_fallback(PropertyID id, ColorResolutionContext color_resolution_context, Color fallback) const
@@ -350,11 +374,8 @@ CSSPixels ComputedProperties::compute_line_height(CSSPixelRect const& viewport_r
     if (line_height.is_keyword() && line_height.to_keyword() == Keyword::Normal)
         return CSSPixels { round_to<i32>(font_metrics.font_size * normal_line_height_scale) };
 
-    if (line_height.is_length()) {
-        auto line_height_length = line_height.as_length().length();
-        if (!line_height_length.is_auto())
-            return line_height_length.to_px(viewport_rect, font_metrics, root_font_metrics);
-    }
+    if (line_height.is_length())
+        return line_height.as_length().length().to_px(viewport_rect, font_metrics, root_font_metrics);
 
     if (line_height.is_number())
         return Length(line_height.as_number().number(), Length::Type::Em).to_px(viewport_rect, font_metrics, root_font_metrics);
@@ -1190,6 +1211,28 @@ TextDecorationStyle ComputedProperties::text_decoration_style() const
 {
     auto const& value = property(PropertyID::TextDecorationStyle);
     return keyword_to_text_decoration_style(value.to_keyword()).release_value();
+}
+
+TextDecorationThickness ComputedProperties::text_decoration_thickness() const
+{
+    auto const& value = property(PropertyID::TextDecorationThickness);
+    if (value.is_keyword()) {
+        switch (value.to_keyword()) {
+        case Keyword::Auto:
+            return { TextDecorationThickness::Auto {} };
+        case Keyword::FromFont:
+            return { TextDecorationThickness::FromFont {} };
+        default:
+            VERIFY_NOT_REACHED();
+        }
+    }
+    if (value.is_length())
+        return TextDecorationThickness { LengthPercentage { value.as_length().length() } };
+    if (value.is_percentage())
+        return TextDecorationThickness { LengthPercentage { value.as_percentage().percentage() } };
+    if (value.is_calculated())
+        return TextDecorationThickness { LengthPercentage { value.as_calculated() } };
+    VERIFY_NOT_REACHED();
 }
 
 TextTransform ComputedProperties::text_transform() const

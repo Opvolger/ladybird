@@ -1100,6 +1100,18 @@ static RefPtr<StyleValue const> interpolate_value_impl(DOM::Element& element, Ca
             return Length::make_px(interpolate_raw(from.length().raw_value(), to.length().raw_value(), delta));
         if (from.is_percentage() && to.is_percentage())
             return Percentage(interpolate_raw(from.percentage().value(), to.percentage().value(), delta));
+        // FIXME: Interpolate calculations
+        return {};
+    };
+
+    static auto interpolate_length_percentage_or_auto = [](LengthPercentageOrAuto const& from, LengthPercentageOrAuto const& to, float delta) -> Optional<LengthPercentageOrAuto> {
+        if (from.is_auto() && to.is_auto())
+            return LengthPercentageOrAuto::make_auto();
+        if (from.is_length() && to.is_length())
+            return Length::make_px(interpolate_raw(from.length().raw_value(), to.length().raw_value(), delta));
+        if (from.is_percentage() && to.is_percentage())
+            return Percentage(interpolate_raw(from.percentage().value(), to.percentage().value(), delta));
+        // FIXME: Interpolate calculations
         return {};
     };
 
@@ -1107,8 +1119,8 @@ static RefPtr<StyleValue const> interpolate_value_impl(DOM::Element& element, Ca
     case StyleValue::Type::Angle:
         return AngleStyleValue::create(Angle::make_degrees(interpolate_raw(from.as_angle().angle().to_degrees(), to.as_angle().angle().to_degrees(), delta)));
     case StyleValue::Type::BackgroundSize: {
-        auto interpolated_x = interpolate_length_percentage(from.as_background_size().size_x(), to.as_background_size().size_x(), delta);
-        auto interpolated_y = interpolate_length_percentage(from.as_background_size().size_y(), to.as_background_size().size_y(), delta);
+        auto interpolated_x = interpolate_length_percentage_or_auto(from.as_background_size().size_x(), to.as_background_size().size_x(), delta);
+        auto interpolated_y = interpolate_length_percentage_or_auto(from.as_background_size().size_y(), to.as_background_size().size_y(), delta);
         if (!interpolated_x.has_value() || !interpolated_y.has_value())
             return {};
 
@@ -1217,11 +1229,18 @@ static RefPtr<StyleValue const> interpolate_value_impl(DOM::Element& element, Ca
         if (from_rect.top_edge.is_auto() != to_rect.top_edge.is_auto() || from_rect.right_edge.is_auto() != to_rect.right_edge.is_auto() || from_rect.bottom_edge.is_auto() != to_rect.bottom_edge.is_auto() || from_rect.left_edge.is_auto() != to_rect.left_edge.is_auto())
             return {};
 
+        auto interpolate_length_or_auto = [](LengthOrAuto const& from, LengthOrAuto const& to, float delta) {
+            if (from.is_auto() && to.is_auto())
+                return LengthOrAuto::make_auto();
+            // FIXME: Actually handle the units not matching.
+            return LengthOrAuto { Length { interpolate_raw(from.length().raw_value(), to.length().raw_value(), delta), from.length().type() } };
+        };
+
         return RectStyleValue::create({
-            Length(interpolate_raw(from_rect.top_edge.raw_value(), to_rect.top_edge.raw_value(), delta), from_rect.top_edge.type()),
-            Length(interpolate_raw(from_rect.right_edge.raw_value(), to_rect.right_edge.raw_value(), delta), from_rect.right_edge.type()),
-            Length(interpolate_raw(from_rect.bottom_edge.raw_value(), to_rect.bottom_edge.raw_value(), delta), from_rect.bottom_edge.type()),
-            Length(interpolate_raw(from_rect.left_edge.raw_value(), to_rect.left_edge.raw_value(), delta), from_rect.left_edge.type()),
+            interpolate_length_or_auto(from_rect.top_edge, to_rect.top_edge, delta),
+            interpolate_length_or_auto(from_rect.right_edge, to_rect.right_edge, delta),
+            interpolate_length_or_auto(from_rect.bottom_edge, to_rect.bottom_edge, delta),
+            interpolate_length_or_auto(from_rect.left_edge, to_rect.left_edge, delta),
         });
     }
     case StyleValue::Type::Transformation:

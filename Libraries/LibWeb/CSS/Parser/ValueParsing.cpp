@@ -1351,7 +1351,7 @@ RefPtr<StyleValue const> Parser::parse_rect_value(TokenStream<ComponentValue>& t
 
     auto context_guard = push_temporary_value_parsing_context(FunctionContext { "rect"sv });
 
-    Vector<Length, 4> params;
+    Vector<LengthOrAuto, 4> params;
     auto argument_tokens = TokenStream { function_token.function().value };
 
     enum class CommaRequirement {
@@ -1379,7 +1379,7 @@ RefPtr<StyleValue const> Parser::parse_rect_value(TokenStream<ComponentValue>& t
         // Negative lengths are permitted.
         if (argument_tokens.next_token().is_ident("auto"sv)) {
             (void)argument_tokens.consume_a_token(); // `auto`
-            params.append(Length::make_auto());
+            params.append(LengthOrAuto::make_auto());
         } else {
             auto maybe_length = parse_length(argument_tokens);
             if (!maybe_length.has_value())
@@ -3173,7 +3173,6 @@ RefPtr<FitContentStyleValue const> Parser::parse_fit_content_value(TokenStream<C
     if (component_value.is_ident("fit-content"sv)) {
         transaction.commit();
         return FitContentStyleValue::create();
-        return nullptr;
     }
 
     if (!component_value.is_function())
@@ -3308,15 +3307,13 @@ RefPtr<StyleValue const> Parser::parse_basic_shape_value(TokenStream<ComponentVa
         // FIXME: Parse the border-radius.
         auto arguments_tokens = TokenStream { component_value.function().value };
 
-        auto parse_length_percentage_or_auto = [this](TokenStream<ComponentValue>& tokens) -> Optional<LengthPercentage> {
+        auto parse_length_percentage_or_auto = [this](TokenStream<ComponentValue>& tokens) -> Optional<LengthPercentageOrAuto> {
             tokens.discard_whitespace();
-            auto value = parse_length_percentage(tokens);
-            if (!value.has_value()) {
-                if (tokens.consume_a_token().is_ident("auto"sv)) {
-                    value = Length::make_auto();
-                }
-            }
-            return value;
+            if (auto value = parse_length_percentage(tokens); value.has_value())
+                return value.release_value();
+            if (tokens.consume_a_token().is_ident("auto"sv))
+                return LengthPercentageOrAuto::make_auto();
+            return {};
         };
 
         auto top = parse_length_percentage_or_auto(arguments_tokens);
@@ -3582,7 +3579,7 @@ Optional<GridSize> Parser::parse_grid_inflexible_breadth(TokenStream<ComponentVa
     // <inflexible-breadth>  = <length-percentage [0,∞]> | min-content | max-content | auto
 
     if (auto fixed_breadth = parse_grid_fixed_breadth(tokens); fixed_breadth.has_value())
-        return fixed_breadth;
+        return GridSize { Size::make_length_percentage(fixed_breadth.value()) };
 
     auto transaction = tokens.begin_transaction();
     if (!tokens.has_next_token())
@@ -3591,11 +3588,11 @@ Optional<GridSize> Parser::parse_grid_inflexible_breadth(TokenStream<ComponentVa
     auto const& token = tokens.consume_a_token();
     if (token.is_ident("max-content"sv)) {
         transaction.commit();
-        return GridSize(GridSize::Type::MaxContent);
+        return GridSize(Size::make_max_content());
     }
     if (token.is_ident("min-content"sv)) {
         transaction.commit();
-        return GridSize(GridSize::Type::MinContent);
+        return GridSize(Size::make_min_content());
     }
     if (token.is_ident("auto"sv)) {
         transaction.commit();
@@ -3606,7 +3603,7 @@ Optional<GridSize> Parser::parse_grid_inflexible_breadth(TokenStream<ComponentVa
 }
 
 // https://www.w3.org/TR/css-grid-2/#typedef-fixed-breadth
-Optional<GridSize> Parser::parse_grid_fixed_breadth(TokenStream<ComponentValue>& tokens)
+Optional<LengthPercentage> Parser::parse_grid_fixed_breadth(TokenStream<ComponentValue>& tokens)
 {
     // <fixed-breadth> = <length-percentage [0,∞]>
 
@@ -3619,7 +3616,7 @@ Optional<GridSize> Parser::parse_grid_fixed_breadth(TokenStream<ComponentValue>&
     if (length_percentage->is_percentage() && length_percentage->percentage().value() < 0)
         return {};
     transaction.commit();
-    return GridSize(length_percentage.release_value());
+    return length_percentage.release_value();
 }
 
 // https://www.w3.org/TR/css-grid-2/#typedef-line-names
@@ -3871,7 +3868,7 @@ Optional<ExplicitGridTrack> Parser::parse_grid_track_size(TokenStream<ComponentV
             if (function_tokens.has_next_token())
                 return {};
             transaction.commit();
-            return ExplicitGridTrack(GridSize(GridSize::Type::FitContent, maybe_length_percentage->length_percentage()));
+            return ExplicitGridTrack(GridSize(Size::make_fit_content(maybe_length_percentage.release_value())));
         }
     }
 
@@ -3895,14 +3892,14 @@ Optional<ExplicitGridTrack> Parser::parse_grid_fixed_size(TokenStream<ComponentV
         auto const& function_token = token.function();
         if (function_token.name.equals_ignoring_ascii_case("minmax"sv)) {
             {
-                GridMinMaxParamParser parse_min = [this](auto& tokens) { return parse_grid_fixed_breadth(tokens); };
+                GridMinMaxParamParser parse_min = [this](auto& tokens) { return parse_grid_fixed_breadth(tokens).map([](auto& it) { return GridSize(Size::make_length_percentage(it)); }); };
                 GridMinMaxParamParser parse_max = [this](auto& tokens) { return parse_grid_track_breadth(tokens); };
                 if (auto result = parse_grid_minmax(tokens, parse_min, parse_max); result.has_value())
                     return result;
             }
             {
                 GridMinMaxParamParser parse_min = [this](auto& tokens) { return parse_grid_inflexible_breadth(tokens); };
-                GridMinMaxParamParser parse_max = [this](auto& tokens) { return parse_grid_fixed_breadth(tokens); };
+                GridMinMaxParamParser parse_max = [this](auto& tokens) { return parse_grid_fixed_breadth(tokens).map([](auto& it) { return GridSize(Size::make_length_percentage(it)); }); };
                 if (auto result = parse_grid_minmax(tokens, parse_min, parse_max); result.has_value())
                     return result;
             }
@@ -3912,7 +3909,7 @@ Optional<ExplicitGridTrack> Parser::parse_grid_fixed_size(TokenStream<ComponentV
     }
 
     if (auto fixed_breadth = parse_grid_fixed_breadth(tokens); fixed_breadth.has_value()) {
-        return ExplicitGridTrack(fixed_breadth.value());
+        return ExplicitGridTrack(GridSize { Size::make_length_percentage(fixed_breadth.release_value()) });
     }
 
     return {};

@@ -68,9 +68,6 @@ public:
         Pt,
         Pc,
         Px,
-
-        // FIXME: Remove auto somehow
-        Auto,
     };
 
     struct FontMetrics {
@@ -90,12 +87,10 @@ public:
     Length(double value, Type type);
     ~Length();
 
-    static Length make_auto();
     static Length make_px(double value);
     static Length make_px(CSSPixels value);
     Length percentage_of(Percentage const&) const;
 
-    bool is_auto() const { return m_type == Type::Auto; }
     bool is_px() const { return m_type == Type::Px; }
 
     bool is_absolute() const
@@ -185,8 +180,6 @@ public:
 
     ALWAYS_INLINE CSSPixels to_px(CSSPixelRect const& viewport_rect, FontMetrics const& font_metrics, FontMetrics const& root_font_metrics) const
     {
-        if (is_auto())
-            return 0;
         if (is_absolute())
             return absolute_length_to_px();
         if (is_font_relative())
@@ -251,6 +244,45 @@ private:
     double m_value { 0 };
 };
 
+class LengthOrAuto {
+public:
+    LengthOrAuto(Length length)
+        : m_length(move(length))
+    {
+    }
+
+    static LengthOrAuto make_auto() { return LengthOrAuto { OptionalNone {} }; }
+
+    bool is_length() const { return m_length.has_value(); }
+    bool is_auto() const { return !m_length.has_value(); }
+
+    Length const& length() const { return m_length.value(); }
+
+    String to_string(SerializationMode mode = SerializationMode::Normal) const
+    {
+        if (is_auto())
+            return "auto"_string;
+        return m_length->to_string(mode);
+    }
+
+    CSSPixels to_px_or_zero(Layout::Node const& node) const
+    {
+        if (is_auto())
+            return 0;
+        return m_length->to_px(node);
+    }
+
+    bool operator==(LengthOrAuto const&) const = default;
+
+private:
+    explicit LengthOrAuto(Optional<Length> maybe_length)
+        : m_length(move(maybe_length))
+    {
+    }
+
+    Optional<Length> m_length;
+};
+
 }
 
 template<>
@@ -258,5 +290,13 @@ struct AK::Formatter<Web::CSS::Length> : Formatter<StringView> {
     ErrorOr<void> format(FormatBuilder& builder, Web::CSS::Length const& length)
     {
         return Formatter<StringView>::format(builder, length.to_string());
+    }
+};
+
+template<>
+struct AK::Formatter<Web::CSS::LengthOrAuto> : Formatter<StringView> {
+    ErrorOr<void> format(FormatBuilder& builder, Web::CSS::LengthOrAuto const& length_or_auto)
+    {
+        return Formatter<StringView>::format(builder, length_or_auto.to_string());
     }
 };

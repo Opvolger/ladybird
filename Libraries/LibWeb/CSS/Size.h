@@ -30,6 +30,7 @@ public:
     static Size make_length(Length);
     static Size make_percentage(Percentage);
     static Size make_calculated(NonnullRefPtr<CalculatedStyleValue const>);
+    static Size make_length_percentage(LengthPercentage const&);
     static Size make_min_content();
     static Size make_max_content();
     static Size make_fit_content(LengthPercentage available_space);
@@ -45,6 +46,8 @@ public:
     bool is_fit_content() const { return m_type == Type::FitContent; }
     bool is_none() const { return m_type == Type::None; }
 
+    bool is_length_percentage() const { return is_length() || is_percentage() || is_calculated(); }
+
     [[nodiscard]] CSSPixels to_px(Layout::Node const&, CSSPixels reference_value) const;
 
     bool contains_percentage() const;
@@ -52,34 +55,35 @@ public:
     CalculatedStyleValue const& calculated() const
     {
         VERIFY(is_calculated());
-        return m_length_percentage.calculated();
+        return m_length_percentage->calculated();
     }
 
-    CSS::Length const& length() const
+    Length const& length() const
     {
         VERIFY(is_length());
-        return m_length_percentage.length();
+        return m_length_percentage->length();
     }
 
-    CSS::Percentage const& percentage() const
+    Percentage const& percentage() const
     {
         VERIFY(is_percentage());
-        return m_length_percentage.percentage();
+        return m_length_percentage->percentage();
     }
 
-    CSS::LengthPercentage const& fit_content_available_space() const
+    Optional<LengthPercentage> const& fit_content_available_space() const
     {
         VERIFY(is_fit_content());
         return m_length_percentage;
     }
 
     String to_string(SerializationMode) const;
+    bool operator==(Size const&) const = default;
 
 private:
-    Size(Type type, LengthPercentage);
+    explicit Size(Type type, Optional<LengthPercentage> = {});
 
     Type m_type {};
-    CSS::LengthPercentage m_length_percentage;
+    Optional<LengthPercentage> m_length_percentage;
 };
 
 }
