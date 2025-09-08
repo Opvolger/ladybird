@@ -10,4 +10,4 @@ They should be resolved before doing a proper merge request.
 
 - [ ] There is now an extra overlay-ports `Meta/CMake/vcpkg/overlay-ports/libvpx`, that is needed until [this pull request](https://github.com/microsoft/vcpkg/pull/47245) is back to main and ladybird is using it.
 
-- [ ] There is now an extra overlay-ports `Meta/CMake/vcpkg/overlay-ports/vcpkg-tool-gn`, that is needed until [this pull request](https://github.com/microsoft/vcpkg/pull/47246) is back to main and ladybird is using it.
+- [ ] There is now an extra overlay-ports `Meta/CMake/vcpkg/overlay-ports/vcpkg-tool-gn`, that is needed until [this pull request](https://github.com/microsoft/vcpkg/pull/47244) is back to main and ladybird is using it.
